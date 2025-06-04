@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcrypt';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
@@ -130,5 +131,35 @@ export async function authenticate(
       }
     }
     throw error;
+  }
+}
+
+export async function registerUser({
+  name,
+  email,
+  password,
+}: {
+  name: string;
+  email: string;
+  password: string;
+}) {
+  // Validate input (you can use zod for more robust validation)
+  if (!name || !email || !password || password.length < 6) {
+    return { success: false, message: 'Invalid input' };
+  }
+  try {
+    // Check if user already exists
+    const existing = await sql`SELECT id FROM users WHERE email=${email}`;
+    if (existing.length > 0) {
+      return { success: false, message: 'Email already registered' };
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await sql`
+      INSERT INTO users (name, email, password)
+      VALUES (${name}, ${email}, ${hashedPassword})
+    `;
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: 'Error creating user' };
   }
 }
